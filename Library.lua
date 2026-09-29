@@ -3126,30 +3126,8 @@ function Library:CreateWindow(...)
 
     Library:MakeDraggable(Outer, 25);
 
-    -- ponytail: UIScale for open/close pop; outline sweep via UIStroke gradient
+    -- ponytail: UIScale for open/close pop
     local WindowScale = Library:Create('UIScale', { Scale = 1, Parent = Outer });
-    local OutlineStroke = Library:Create('UIStroke', {
-        Color = Library.AccentColor;
-        Thickness = 1;
-        Parent = Inner;
-    });
-    local OutlineGradient = Library:Create('UIGradient', {
-        Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Library.AccentColor),
-            ColorSequenceKeypoint.new(0.5, Color3.new(1, 1, 1)),
-            ColorSequenceKeypoint.new(1, Library.AccentColor),
-        });
-        Parent = OutlineStroke;
-    });
-    if Library.OutlineGradient and Library.AnimationEnabled then
-        task.spawn(function()
-            while Outer.Parent do
-                OutlineGradient.Rotation = 0;
-                TweenService:Create(OutlineGradient, TweenInfo.new(2, Enum.EasingStyle.Linear), { Rotation = 360 }):Play();
-                task.wait(2);
-            end;
-        end);
-    end;
 
     local Inner = Library:Create('Frame', {
         BackgroundColor3 = Library.MainColor;
@@ -3165,6 +3143,34 @@ function Library:CreateWindow(...)
         BackgroundColor3 = 'MainColor';
         BorderColor3 = 'AccentColor';
     });
+
+    -- ponytail: outline sweep via UIStroke gradient (re-checks flag so demo can toggle it)
+    local OutlineStroke = Library:Create('UIStroke', {
+        Color = Library.AccentColor;
+        Thickness = 1;
+        Parent = Inner;
+    });
+    local OutlineGradient = Library:Create('UIGradient', {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Library.AccentColor),
+            ColorSequenceKeypoint.new(0.5, Color3.new(1, 1, 1)),
+            ColorSequenceKeypoint.new(1, Library.AccentColor),
+        });
+        Parent = OutlineStroke;
+    });
+    task.spawn(function()
+        while Outer.Parent do
+            if Library.OutlineGradient and Library.AnimationEnabled then
+                OutlineStroke.Transparency = 0;
+                OutlineGradient.Rotation = 0;
+                TweenService:Create(OutlineGradient, TweenInfo.new(2, Enum.EasingStyle.Linear), { Rotation = 360 }):Play();
+                task.wait(2);
+            else
+                OutlineStroke.Transparency = 1;
+                task.wait(0.25);
+            end;
+        end;
+    end);
 
     local WindowLabel = Library:CreateLabel({
         Position = UDim2.new(0, 7, 0, 0);
@@ -3836,6 +3842,10 @@ function Library:CreateWindow(...)
             WindowLabel.TextColor3 = Library.FontColor;
             Library:AddToRegistry(WindowLabel, { TextColor3 = 'FontColor' });
         end;
+    end;
+
+    function Window:SetOutlineGradient(Enabled)
+        Library.OutlineGradient = (not not Enabled);
     end;
 
     return Window;
