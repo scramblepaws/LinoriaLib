@@ -79,7 +79,9 @@ Anim:AddSlider('AnimSpeed', { Text = 'Duration (0-100)', Default = 15, Min = 0, 
 Anim:AddToggle('LogoRainbow', { Text = 'Rainbow logo ✦', Default = true, Callback = function(V) if Window.AnimateLogo then Window:AnimateLogo(V, '✦', 'Animated demo') end end })
 Anim:AddToggle('ControlPulse', { Text = 'Pulse ON toggles/sliders', Default = true, Callback = function(V) if Library.SetControlPulse then Library:SetControlPulse(V) else Library.ControlPulse = (not not V) end end })
 Anim:AddToggle('OutlineSweep', { Text = 'Outline gradient sweep', Default = true, Callback = function(V) if Window.SetOutlineGradient then Window:SetOutlineGradient(V) end end })
+Anim:AddToggle('WatermarkStats', { Text = 'Watermark fps/ping', Default = true, Callback = function(V) if Library.SetWatermarkStats then Library:SetWatermarkStats(V) end end })
 Anim:AddLabel('0 = instant, 100 = 1s. Covers toggle/slider/dropdown/tab/menu/logo.', true)
+Anim:AddLabel('Ctrl+K jumps to any control. Type into slider boxes.', true)
 
 Toggles.AnimEnabled:OnChanged(function() ApplyAnimEnabled(Toggles.AnimEnabled.Value) end)
 Options.AnimSpeed:OnChanged(function() ApplyAnimSpeed(Options.AnimSpeed.Value) end)
@@ -102,6 +104,7 @@ Note:AddButton({ Text = 'Info', Func = function() Library:NotifyInfo('Info notif
 Library:SetWatermarkVisibility(true)
 Library:SetWatermark('Animated LinoriaLib demo')
 if Library.SetWatermarkAvatar then Library:SetWatermarkAvatar('') end
+if Library.SetWatermarkStats then Library:SetWatermarkStats(true) end
 
 local MenuGroup = Tabs['UI Settings']:AddLeftGroupbox('Menu')
 MenuGroup:AddButton('Unload', function() Library:Unload() end)

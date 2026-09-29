@@ -47,6 +47,10 @@ local Library = {
     KeyCheck = nil;
     WatermarkAvatar = ''; -- custom rbxassetid; '' = player avatar, fail = text only
 
+    -- ponytail: text auto-stats; single loop, no drawing
+    WatermarkStats = false;
+    WatermarkBase = '';
+
     Black = Color3.new(0, 0, 0);
     Font = Enum.Font.Code,
 
@@ -1618,6 +1622,9 @@ do
 
         InitEvents(Button)
 
+        Button.Groupbox = Groupbox;
+        Library:AddToPalette({ Text = Button.Text or 'Button'; Type = 'Button'; Outer = Button.Outer; Groupbox = Groupbox; Gated = Button.Gated; });
+
         function Button:AddTooltip(tooltip)
             if type(tooltip) == 'string' then
                 Library:AddToolTip(tooltip, self.Outer)
@@ -2023,7 +2030,10 @@ do
 
         Toggle.TextLabel = ToggleLabel;
         Toggle.Inner = ToggleInner;
+        Toggle.Outer = ToggleOuter;
+        Toggle.Groupbox = Groupbox;
         Toggle.Container = Container;
+        Library:AddToPalette({ Text = Info.Text or Idx; Type = 'Toggle'; Outer = ToggleOuter; Groupbox = Groupbox; Gated = Info.Gated; });
         setmetatable(Toggle, BaseAddons);
 
         Toggles[Idx] = Toggle;
@@ -2121,12 +2131,38 @@ do
         });
 
         local DisplayLabel = Library:CreateLabel({
-            Size = UDim2.new(1, 0, 1, 0);
+            Size = UDim2.new(1, -54, 1, 0);
             TextSize = 14;
             Text = 'Infinite';
             ZIndex = 9;
             Parent = SliderInner;
         });
+
+        -- ponytail: inline type-in; Enter commits, click-away reverts
+        local ValueBox = Library:Create('TextBox', {
+            BackgroundTransparency = 1;
+            Font = Library.Font;
+            Position = UDim2.new(1, -50, 0, 0);
+            Size = UDim2.new(0, 50, 1, 0);
+            Text = '';
+            TextColor3 = Library.FontColor;
+            TextSize = 13;
+            TextXAlignment = Enum.TextXAlignment.Right;
+            ZIndex = 10;
+            Parent = SliderInner;
+        });
+
+        Library:AddToRegistry(ValueBox, {
+            TextColor3 = 'FontColor';
+        });
+
+        ValueBox.FocusLost:Connect(function(Enter)
+            if Enter and tonumber(ValueBox.Text) then
+                Slider:SetValue(ValueBox.Text);
+                Library:AttemptSave();
+            end;
+            Slider:Display();
+        end);
 
         Library:OnHighlight(SliderOuter, SliderOuter,
             { BorderColor3 = 'AccentColor' },
@@ -2155,6 +2191,10 @@ do
 
             local X = math.ceil(Library:MapValue(Slider.Value, Slider.Min, Slider.Max, 0, Slider.MaxSize));
             Library:CreateTween(Fill, { Size = UDim2.new(0, X, 1, 0) });
+
+            if not ValueBox:IsFocused() then
+                ValueBox.Text = tostring(Slider.Value);
+            end;
 
             HideBorderRight.Visible = not (X == Slider.MaxSize or X == 0);
         end;
@@ -2234,6 +2274,9 @@ do
         Groupbox:Resize();
 
         Slider.Fill = Fill;
+        Slider.Outer = SliderOuter;
+        Slider.Groupbox = Groupbox;
+        Library:AddToPalette({ Text = Info.Text or Idx; Type = 'Slider'; Outer = SliderOuter; Groupbox = Groupbox; Gated = Info.Gated; });
         Options[Idx] = Slider;
 
         return Slider;
@@ -2729,6 +2772,9 @@ do
         Groupbox:AddBlank(Info.BlankSize or 5);
         Groupbox:Resize();
 
+        Dropdown.Outer = DropdownOuter;
+        Dropdown.Groupbox = Groupbox;
+        Library:AddToPalette({ Text = Info.Text or Idx; Type = 'Dropdown'; Outer = DropdownOuter; Groupbox = Groupbox; Gated = Info.Gated; });
         Options[Idx] = Dropdown;
 
         return Dropdown;
@@ -2988,13 +3034,53 @@ function Library:SetWatermark(Text)
     Library.Watermark.Size = UDim2.new(0, X + 15, 0, (Y * 1.5) + 3);
     Library:SetWatermarkVisibility(true)
 
-    Library.WatermarkText.Text = Text;
+    Library.WatermarkBase = Text;
+    if not Library.WatermarkStats then
+        Library.WatermarkText.Text = Text;
+    end;
     Library:RefreshWatermarkAvatar();
 end;
 
 function Library:SetWatermarkAvatar(AssetId)
     Library.WatermarkAvatar = AssetId or '';
     Library:RefreshWatermarkAvatar();
+end;
+
+function Library:SetWatermarkStats(Bool)
+    Library.WatermarkStats = (not not Bool);
+
+    if Library.WatermarkStats and not Library._StatsLoop then
+        Library._StatsLoop = true;
+
+        task.spawn(function()
+            local Frames = 0;
+            local Fps = 60;
+
+            local Conn = RenderStepped:Connect(function()
+                Frames += 1;
+            end);
+
+            while Library.WatermarkStats and Library.Watermark do
+                task.wait(1);
+
+                Fps = Frames;
+                Frames = 0;
+
+                local Ping = 0;
+                pcall(function()
+                    Ping = math.floor(game:GetService('Stats').Network.ServerStatsItem['Data Ping']:GetValue());
+                end);
+
+                local Text = ('%s | %s fps | %s ms'):format(Library.WatermarkBase, Fps, Ping);
+                local X, Y = Library:GetTextBounds(Text, Library.Font, 14);
+                Library.Watermark.Size = UDim2.new(0, X + 15, 0, (Y * 1.5) + 3);
+                Library.WatermarkText.Text = Text;
+            end;
+
+            Conn:Disconnect();
+            Library._StatsLoop = false;
+        end);
+    end;
 end;
 
 function Library:RefreshWatermarkAvatar()
@@ -3137,6 +3223,177 @@ end;
 
 function Library:NotifyError(Text, Time)
     return Library:Notify(Text, Time, Library.RiskColor);
+end;
+
+-- ponytail: flat index; entries made at control creation, jump needs Groupbox.Tab
+Library.PaletteIndex = {};
+
+function Library:AddToPalette(Entry)
+    table.insert(Library.PaletteIndex, Entry);
+end;
+
+function Library:PaletteJump(Entry)
+    local Tab = Entry.Groupbox and Entry.Groupbox.Tab;
+    if Tab then
+        if Tab.ShowTab then Tab:ShowTab() elseif Tab.Show then Tab:Show() end;
+    end;
+
+    local Scroller = Entry.Outer;
+    while Scroller and not Scroller:IsA('ScrollingFrame') do
+        Scroller = Scroller.Parent;
+    end;
+    if Scroller then
+        Scroller.CanvasPosition = Vector2.new(0, math.max(0, Entry.Outer.AbsolutePosition.Y - Scroller.AbsolutePosition.Y - 40));
+    end;
+
+    local Flash = Library:Create('UIStroke', {
+        Color = Library.AccentColor;
+        Thickness = 2;
+        Transparency = 0;
+        Parent = Entry.Outer;
+    });
+    TweenService:Create(Flash, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = 1 }):Play();
+    task.delay(0.65, function() Flash:Destroy() end);
+end;
+
+function Library:TogglePalette()
+    if Library.PaletteOuter and Library.PaletteOuter.Visible then
+        Library.PaletteOuter.Visible = false;
+        return;
+    end;
+
+    if not Library.PaletteOuter then
+        local Outer = Library:Create('Frame', {
+            AnchorPoint = Vector2.new(0.5, 0);
+            BackgroundColor3 = Color3.new(0, 0, 0);
+            BorderColor3 = Color3.new(0, 0, 0);
+            Position = UDim2.new(0.5, 0, 0, 100);
+            Size = UDim2.fromOffset(300, 220);
+            ZIndex = 500;
+            Visible = false;
+            Parent = ScreenGui;
+        });
+
+        local Inner = Library:Create('Frame', {
+            BackgroundColor3 = Library.MainColor;
+            BorderColor3 = Library.AccentColor;
+            BorderMode = Enum.BorderMode.Inset;
+            Size = UDim2.new(1, 0, 1, 0);
+            ZIndex = 501;
+            Parent = Outer;
+        });
+
+        Library:AddToRegistry(Inner, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'AccentColor'; });
+
+        local Search = Library:Create('TextBox', {
+            BackgroundColor3 = Library.BackgroundColor;
+            BorderColor3 = Library.OutlineColor;
+            Font = Library.Font;
+            PlaceholderText = 'Type to search controls...';
+            Text = '';
+            TextColor3 = Library.FontColor;
+            TextSize = 14;
+            TextXAlignment = Enum.TextXAlignment.Left;
+            ClearTextOnFocus = false;
+            Size = UDim2.new(1, -8, 0, 22);
+            Position = UDim2.fromOffset(4, 4);
+            ZIndex = 502;
+            Parent = Inner;
+        });
+
+        local List = Library:Create('ScrollingFrame', {
+            BackgroundTransparency = 1;
+            BorderSizePixel = 0;
+            CanvasSize = UDim2.new(0, 0, 0, 0);
+            Position = UDim2.fromOffset(4, 30);
+            Size = UDim2.new(1, -8, 1, -34);
+            ScrollBarThickness = 3;
+            ZIndex = 502;
+            Parent = Inner;
+        });
+
+        Library:Create('UIListLayout', {
+            FillDirection = Enum.FillDirection.Vertical;
+            SortOrder = Enum.SortOrder.LayoutOrder;
+            Parent = List;
+        });
+
+        local Shown = {};
+
+        local function Refresh()
+            for _, El in next, List:GetChildren() do
+                if not El:IsA('UIListLayout') then El:Destroy() end;
+            end;
+
+            local Filter = Search.Text:lower();
+            local Count = 0;
+            Shown = {};
+
+            for _, Entry in next, Library.PaletteIndex do
+                if Filter ~= '' and not Entry.Text:lower():find(Filter, 1, true) then
+                    continue;
+                end;
+
+                Count += 1;
+                if Count > 30 then break end;
+                Shown[#Shown + 1] = Entry;
+
+                local Row = Library:Create('TextButton', {
+                    BackgroundColor3 = Library.MainColor;
+                    BorderColor3 = Library.OutlineColor;
+                    BorderMode = Enum.BorderMode.Middle;
+                    Font = Library.Font;
+                    Text = ('%s  ·  %s%s'):format(Entry.Type, (Entry.Gated and Library.KeyLocked) and '🔒 ' or '', Entry.Text);
+                    TextColor3 = Library.FontColor;
+                    TextSize = 14;
+                    TextXAlignment = Enum.TextXAlignment.Left;
+                    Size = UDim2.new(1, -1, 0, 20);
+                    ZIndex = 503;
+                    Parent = List;
+                });
+
+                Row.MouseButton1Click:Connect(function()
+                    Library.PaletteOuter.Visible = false;
+                    Search:ReleaseFocus();
+                    Library:PaletteJump(Entry);
+                end);
+            end;
+
+            List.CanvasSize = UDim2.fromOffset(0, Count * 20);
+        end;
+
+        Search:GetPropertyChangedSignal('Text'):Connect(Refresh);
+        Search.FocusLost:Connect(function(Enter)
+            if not Enter then return end;
+            local First = Shown[1];
+            if First then
+                Library.PaletteOuter.Visible = false;
+                Library:PaletteJump(First);
+            end;
+        end);
+
+        Library.PaletteOuter = Outer;
+        Library.PaletteSearch = Search;
+        Library.PaletteRefresh = Refresh;
+    end;
+
+    Library.PaletteSearch.Text = '';
+    Library:PaletteRefresh();
+    Library.PaletteOuter.Visible = true;
+    Library.PaletteSearch:CaptureFocus();
+end;
+
+function Library:InitPalette()
+    if Library._PaletteInit then return end;
+    Library._PaletteInit = true;
+
+    Library:GiveSignal(InputService.InputBegan:Connect(function(Input, Processed)
+        if Processed then return end;
+        if InputService:GetFocusedTextBox() then return end;
+        if Input.KeyCode == Enum.KeyCode.K and (InputService:IsKeyDown(Enum.KeyCode.LeftControl) or InputService:IsKeyDown(Enum.KeyCode.RightControl)) then
+            task.spawn(Library.TogglePalette);
+        end;
+    end));
 end;
 
 function Library:CreateWindow(...)
@@ -3430,6 +3687,7 @@ function Library:CreateWindow(...)
 
         function Tab:AddGroupbox(Info)
             local Groupbox = {};
+            Groupbox.Tab = self;
 
             local BoxOuter = Library:Create('Frame', {
                 BackgroundColor3 = Library.BackgroundColor;
@@ -3911,6 +4169,8 @@ function Library:CreateWindow(...)
     end))
 
     if Config.AutoShow then task.spawn(Library.Toggle) end
+
+    Library:InitPalette();
 
     Window.Holder = Outer;
 
