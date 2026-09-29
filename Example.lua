@@ -21,8 +21,9 @@ local Tabs = {
 }
 
 -- Animated logo: unicode icon + rainbow (no HTTP icon API; Roblox text can't render SVGs)
-Window:SetLogo('Animated demo', '✦')
-Window:AnimateLogo(true, '✦', 'Animated demo')
+-- ponytail: guards so old cached lib can't crash demo
+if Window.SetLogo then Window:SetLogo('Animated demo', '✦') end
+if Window.AnimateLogo then Window:AnimateLogo(true, '✦', 'Animated demo') end
 
 -- Main controls (tweened: toggle fill, slider fill, tab button)
 local Left = Tabs.Main:AddLeftGroupbox('Demo')
