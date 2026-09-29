@@ -50,6 +50,20 @@ Dep:AddToggle('DepToggle', { Text = 'Revealed with toggle' })
 Dep:AddSlider('DepSlider', { Text = 'Slider', Default = 50, Min = 0, Max = 100, Rounding = 0 })
 Dep:SetupDependencies({ { Toggles.ControlToggle, true } })
 
+-- Locked until key passes (try them before unlocking)
+local Gated = Tabs.Main:AddRightGroupbox('Locked 🔒')
+Gated:AddToggle('GatedToggle', { Text = 'Gated toggle', Gated = true })
+Gated:AddSlider('GatedSlider', { Text = 'Gated slider', Default = 50, Min = 0, Max = 100, Rounding = 0, Gated = true })
+Gated:AddButton({ Text = 'Gated button', Func = function() Library:Notify('Gated action ran', 2) end, Gated = true })
+
+-- Key gating: custom check fn + key box tab (gated controls carry Gated = true)
+if Library.SetKeyCheck then Library:SetKeyCheck(function(Key) return Key == 'demo123' end) end
+local KeyBox = Tabs.Main:AddLeftGroupbox('Key')
+KeyBox:AddInput('KeyInput', { Default = '', Text = 'Key (hint: demo123)', Placeholder = 'Enter key' })
+KeyBox:AddButton({ Text = 'Unlock', Func = function()
+    local Ok = Library.Unlock and Library:Unlock(Options.KeyInput.Value)
+    Library:Notify(Ok and 'Unlocked ✓' or 'Wrong key', 2)
+end })
 -- Animation knobs (ponytail: direct props so demo runs on old remote too)
 local function ApplyAnimEnabled(V) if Library.SetAnimationEnabled then Library:SetAnimationEnabled(V) else Library.AnimationEnabled = (not not V) end end
 local function ApplyAnimSpeed(V) if Library.SetAnimationSpeed then Library:SetAnimationSpeed(V / 100) else Library.AnimationDuration = math.clamp((tonumber(V) or 15) / 100, 0, 1) end end
@@ -57,6 +71,7 @@ local Anim = Tabs.Main:AddLeftGroupbox('Animations')
 Anim:AddToggle('AnimEnabled', { Text = 'Animations enabled', Default = true, Callback = ApplyAnimEnabled })
 Anim:AddSlider('AnimSpeed', { Text = 'Duration (0-100)', Default = 15, Min = 0, Max = 100, Rounding = 0, Callback = ApplyAnimSpeed })
 Anim:AddToggle('LogoRainbow', { Text = 'Rainbow logo ✦', Default = true, Callback = function(V) if Window.AnimateLogo then Window:AnimateLogo(V, '✦', 'Animated demo') end end })
+Anim:AddToggle('ControlPulse', { Text = 'Pulse controls', Default = true, Callback = function(V) if Library.SetControlPulse then Library:SetControlPulse(V) else Library.ControlPulse = (not not V) end end })
 Anim:AddLabel('0 = instant, 100 = 1s. Covers toggle/slider/dropdown/tab/menu/logo.', true)
 
 Toggles.AnimEnabled:OnChanged(function() ApplyAnimEnabled(Toggles.AnimEnabled.Value) end)
@@ -65,6 +80,7 @@ Options.AnimSpeed:OnChanged(function() ApplyAnimSpeed(Options.AnimSpeed.Value) e
 -- Menu + theme plumbing (unchanged API)
 Library:SetWatermarkVisibility(true)
 Library:SetWatermark('Animated LinoriaLib demo')
+if Library.SetWatermarkAvatar then Library:SetWatermarkAvatar('') end -- '' = player avatar, fail = text
 
 local MenuGroup = Tabs['UI Settings']:AddLeftGroupbox('Menu')
 MenuGroup:AddButton('Unload', function() Library:Unload() end)
