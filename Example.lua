@@ -94,9 +94,9 @@ Pic:AddLabel('Blank fetches your Roblox avatar; failure falls back to text.', tr
 
 -- 9. Typed notifies: same slide, colored bar (also try Crimson/Mono in UI Settings > Themes)
 local Note = Tabs.Animations:AddRightGroupbox('Notify types')
-Note:AddButton({ Text = 'Info', Func = function() Library:NotifyInfo('Info notify', 2) end })
-    :AddButton({ Text = 'Success', Func = function() Library:NotifySuccess('Success notify', 2) end })
-    :AddButton({ Text = 'Error', Func = function() Library:NotifyError('Error notify', 2) end })
+Note:AddButton({ Text = 'Info notify', Func = function() Library:NotifyInfo('Info notify', 2) end })
+Note:AddButton({ Text = 'Success notify', Func = function() Library:NotifySuccess('Success notify', 2) end })
+Note:AddButton({ Text = 'Error notify', Func = function() Library:NotifyError('Error notify', 2) end })
 
 -- 10. Collapsible: click any ▼ header to collapse it (try this box)
 
