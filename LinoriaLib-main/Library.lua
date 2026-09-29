@@ -2517,13 +2517,17 @@ do
         function Dropdown:OpenDropdown()
             ListOuter.Visible = true;
             Library.OpenedFrames[ListOuter] = true;
-            DropdownArrow.Rotation = 180;
+            Library:CreateTween(DropdownArrow, { Rotation = 180 });
+            -- ponytail: grow transition, clip-safe because ListOuter is a Frame
+            local Full = ListOuter.Size;
+            ListOuter.Size = UDim2.new(Full.X.Scale, Full.X.Offset, 0, 0);
+            Library:CreateTween(ListOuter, { Size = Full });
         end;
 
         function Dropdown:CloseDropdown()
-            ListOuter.Visible = false;
             Library.OpenedFrames[ListOuter] = nil;
-            DropdownArrow.Rotation = 0;
+            Library:CreateTween(DropdownArrow, { Rotation = 0 });
+            ListOuter.Visible = false;
         end;
 
         function Dropdown:OnChanged(Func)
@@ -3198,6 +3202,9 @@ function Library:CreateWindow(...)
             Library:CreateTween(TabButton, { BackgroundColor3 = Library.MainColor });
             Library.RegistryMap[TabButton].Properties.BackgroundColor3 = 'MainColor';
             TabFrame.Visible = true;
+            -- ponytail: slide-in transition for tab content
+            TabFrame.Position = UDim2.new(0, 10, 0, 0);
+            Library:CreateTween(TabFrame, { Position = UDim2.new(0, 0, 0, 0) });
         end;
 
         function Tab:HideTab()

@@ -27,14 +27,16 @@ Left:AddSlider('DemoSlider', { Text = 'Animated slider', Default = 50, Min = 0, 
 Left:AddDropdown('DemoDropdown', { Text = 'Dropdown', Values = { 'a', 'b', 'c' }, Default = 1 })
 Left:AddButton({ Text = 'Pulse toggle', Func = function() Toggles.DemoToggle:SetValue(not Toggles.DemoToggle.Value) end })
 
--- Animation knobs
+-- Animation knobs (ponytail: direct props so demo runs on old remote too)
+local function ApplyAnimEnabled(V) if Library.SetAnimationEnabled then Library:SetAnimationEnabled(V) else Library.AnimationEnabled = (not not V) end end
+local function ApplyAnimSpeed(V) if Library.SetAnimationSpeed then Library:SetAnimationSpeed(V / 100) else Library.AnimationDuration = math.clamp((tonumber(V) or 15) / 100, 0, 1) end end
 local Anim = Tabs.Main:AddRightGroupbox('Animations')
-Anim:AddToggle('AnimEnabled', { Text = 'Animations enabled', Default = true, Callback = function(V) Library:SetAnimationEnabled(V) end })
-Anim:AddSlider('AnimSpeed', { Text = 'Duration (s)', Default = 15, Min = 0, Max = 100, Rounding = 0, Callback = function(V) Library:SetAnimationSpeed(V / 100) end })
-Anim:AddLabel('0 = instant, 100 = 1s. Toggle/slider/tab/menu fade all use it.', true)
+Anim:AddToggle('AnimEnabled', { Text = 'Animations enabled', Default = true, Callback = ApplyAnimEnabled })
+Anim:AddSlider('AnimSpeed', { Text = 'Duration (s)', Default = 15, Min = 0, Max = 100, Rounding = 0, Callback = ApplyAnimSpeed })
+Anim:AddLabel('0 = instant, 100 = 1s. Toggle/slider/dropdown/tab/menu fade all use it.', true)
 
-Toggles.AnimEnabled:OnChanged(function() Library:SetAnimationEnabled(Toggles.AnimEnabled.Value) end)
-Options.AnimSpeed:OnChanged(function() Library:SetAnimationSpeed(Options.AnimSpeed.Value / 100) end)
+Toggles.AnimEnabled:OnChanged(function() ApplyAnimEnabled(Toggles.AnimEnabled.Value) end)
+Options.AnimSpeed:OnChanged(function() ApplyAnimSpeed(Options.AnimSpeed.Value) end)
 
 -- Menu + theme plumbing (unchanged API)
 Library:SetWatermarkVisibility(true)
