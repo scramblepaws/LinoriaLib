@@ -3658,6 +3658,27 @@ function Library:CreateWindow(...)
 
     Window.Holder = Outer;
 
+    -- ponytail: unicode icons, not HTTP SVGs (TextLabels can't render those)
+    function Window:SetLogo(Text, Icon)
+        WindowLabel.Text = ((Icon and Icon .. ' ' or '') .. (Text or ''));
+    end;
+
+    function Window:AnimateLogo(Enabled, Icon, Text)
+        if Text or Icon then
+            Window:SetLogo(Text or Config.Title, Icon);
+        end;
+        if Window._LogoConn then Window._LogoConn:Disconnect() Window._LogoConn = nil end;
+        Library:RemoveFromRegistry(WindowLabel);
+        if Enabled then
+            Window._LogoConn = RenderStepped:Connect(function()
+                WindowLabel.TextColor3 = Library.CurrentRainbowColor;
+            end);
+        else
+            WindowLabel.TextColor3 = Library.FontColor;
+            Library:AddToRegistry(WindowLabel, { TextColor3 = 'FontColor' });
+        end;
+    end;
+
     return Window;
 end;
 

@@ -20,6 +20,10 @@ local Tabs = {
     ['UI Settings'] = Window:AddTab('UI Settings'),
 }
 
+-- Animated logo: unicode icon + rainbow (no HTTP icon API; Roblox text can't render SVGs)
+Window:SetLogo('Animated demo', '✦')
+Window:AnimateLogo(true, '✦', 'Animated demo')
+
 -- Main controls (tweened: toggle fill, slider fill, tab button)
 local Left = Tabs.Main:AddLeftGroupbox('Demo')
 Left:AddToggle('DemoToggle', { Text = 'Animated toggle', Default = true })
