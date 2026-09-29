@@ -29,12 +29,23 @@ local Library = {
 
     HudRegistry = {};
 
-    FontColor = Color3.fromRGB(255, 255, 255);
-    MainColor = Color3.fromRGB(28, 28, 28);
-    BackgroundColor = Color3.fromRGB(20, 20, 20);
-    AccentColor = Color3.fromRGB(0, 85, 255);
-    OutlineColor = Color3.fromRGB(50, 50, 50);
-    RiskColor = Color3.fromRGB(255, 50, 50),
+    FontColor = Color3.fromRGB(235, 235, 240);
+    MainColor = Color3.fromRGB(24, 24, 28);
+    BackgroundColor = Color3.fromRGB(16, 16, 20);
+    AccentColor = Color3.fromRGB(88, 101, 242);
+    OutlineColor = Color3.fromRGB(45, 45, 55);
+    RiskColor = Color3.fromRGB(255, 70, 70),
+
+    -- ponytail: single anim knob, per-control tweens if this feels limiting
+    AnimationEnabled = true;
+    AnimationDuration = 0.15;
+    ControlPulse = true; -- rainbow toggle/slider fills
+    OutlineGradient = true; -- accent->white sweep on window border
+
+    -- ponytail: key gating; set KeyCheck = function(key) return key == '...' end
+    KeyLocked = true;
+    KeyCheck = nil;
+    WatermarkAvatar = ''; -- custom rbxassetid; '' = player avatar, fail = text only
 
     Black = Color3.new(0, 0, 0);
     Font = Enum.Font.Code,
@@ -63,6 +74,20 @@ table.insert(Library.Signals, RenderStepped:Connect(function(Delta)
 
         Library.CurrentRainbowHue = Hue;
         Library.CurrentRainbowColor = Color3.fromHSV(Hue, 0.8, 1);
+
+        -- ponytail: one loop repaints ON toggles + slider fills; Display() snapshots otherwise
+        if Library.ControlPulse and Library.AnimationEnabled then
+            for _, T in next, Toggles do
+                if T.Value and T.Inner then
+                    T.Inner.BackgroundColor3 = Library.CurrentRainbowColor;
+                end;
+            end;
+            for _, S in next, Options do
+                if S.Type == 'Slider' and S.Fill then
+                    S.Fill.BackgroundColor3 = Library.CurrentRainbowColor;
+                end;
+            end;
+        end;
     end
 end))
 
@@ -130,6 +155,50 @@ function Library:Create(Class, Properties)
     end;
 
     return _Instance;
+end;
+
+-- ponytail: one tween path for all control anims, instant fallback when disabled
+function Library:CreateTween(Inst, Props, Duration)
+    for Prop, Value in next, Props do
+        if not Library.AnimationEnabled then
+            Inst[Prop] = Value;
+        end;
+    end;
+
+    if not Library.AnimationEnabled then
+        return;
+    end;
+
+    TweenService:Create(Inst, TweenInfo.new(Duration or Library.AnimationDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), Props):Play();
+end;
+
+function Library:SetAnimationEnabled(Bool)
+    Library.AnimationEnabled = (not not Bool);
+end;
+
+function Library:SetAnimationSpeed(Duration)
+    Library.AnimationDuration = math.clamp(tonumber(Duration) or 0.15, 0, 1);
+end;
+
+function Library:SetControlPulse(Bool)
+    Library.ControlPulse = (not not Bool);
+end;
+
+-- ponytail: gated controls carry Info.Gated; key box itself never gated
+function Library:SetKeyCheck(Fn)
+    Library.KeyCheck = Fn;
+end;
+
+function Library:Unlock(Key)
+    local Ok = Library.KeyCheck and Library.KeyCheck(Key);
+    if Ok then
+        Library.KeyLocked = false;
+    end;
+    return (not not Ok);
+end;
+
+function Library:GatedBlocked(Info)
+    return Info and Info.Gated and Library.KeyLocked;
 end;
 
 function Library:ApplyTextStroke(Inst)
@@ -1413,6 +1482,7 @@ do
                 Obj.Func = Props.Func
                 Obj.DoubleClick = Props.DoubleClick
                 Obj.Tooltip = Props.Tooltip
+                Obj.Gated = Props.Gated
             else
                 Obj.Text = select(1, ...)
                 Obj.Func = select(2, ...)
@@ -1510,6 +1580,10 @@ do
             Button.Outer.InputBegan:Connect(function(Input)
                 if not ValidateClick(Input) then return end
                 if Button.Locked then return end
+                if Button.Gated and Library.KeyLocked then
+                    Library:Notify('🔒 Locked: enter key first', 2);
+                    return;
+                end
 
                 if Button.DoubleClick then
                     Library:RemoveFromRegistry(Button.Label)
@@ -1820,6 +1894,7 @@ do
         local Toggle = {
             Value = Info.Default or false;
             Type = 'Toggle';
+            Gated = Info.Gated;
 
             Callback = Info.Callback or function(Value) end;
             Addons = {},
@@ -1894,8 +1969,9 @@ do
         end
 
         function Toggle:Display()
-            ToggleInner.BackgroundColor3 = Toggle.Value and Library.AccentColor or Library.MainColor;
-            ToggleInner.BorderColor3 = Toggle.Value and Library.AccentColorDark or Library.OutlineColor;
+            local Bg = Toggle.Value and Library.AccentColor or Library.MainColor;
+            local Bd = Toggle.Value and Library.AccentColorDark or Library.OutlineColor;
+            Library:CreateTween(ToggleInner, { BackgroundColor3 = Bg; BorderColor3 = Bd; });
 
             Library.RegistryMap[ToggleInner].Properties.BackgroundColor3 = Toggle.Value and 'AccentColor' or 'MainColor';
             Library.RegistryMap[ToggleInner].Properties.BorderColor3 = Toggle.Value and 'AccentColorDark' or 'OutlineColor';
@@ -1907,6 +1983,10 @@ do
         end;
 
         function Toggle:SetValue(Bool)
+            if Toggle.Gated and Library.KeyLocked then
+                Library:Notify('🔒 Locked: enter key first', 2);
+                return;
+            end;
             Bool = (not not Bool);
 
             Toggle.Value = Bool;
@@ -1942,6 +2022,7 @@ do
         Groupbox:Resize();
 
         Toggle.TextLabel = ToggleLabel;
+        Toggle.Inner = ToggleInner;
         Toggle.Container = Container;
         setmetatable(Toggle, BaseAddons);
 
@@ -1966,6 +2047,7 @@ do
             Rounding = Info.Rounding;
             MaxSize = 232;
             Type = 'Slider';
+            Gated = Info.Gated;
             Callback = Info.Callback or function(Value) end;
         };
 
@@ -2072,7 +2154,7 @@ do
             end
 
             local X = math.ceil(Library:MapValue(Slider.Value, Slider.Min, Slider.Max, 0, Slider.MaxSize));
-            Fill.Size = UDim2.new(0, X, 1, 0);
+            Library:CreateTween(Fill, { Size = UDim2.new(0, X, 1, 0) });
 
             HideBorderRight.Visible = not (X == Slider.MaxSize or X == 0);
         end;
@@ -2096,6 +2178,10 @@ do
         end;
 
         function Slider:SetValue(Str)
+            if Slider.Gated and Library.KeyLocked then
+                Library:Notify('🔒 Locked: enter key first', 2);
+                return;
+            end;
             local Num = tonumber(Str);
 
             if (not Num) then
@@ -2113,6 +2199,10 @@ do
 
         SliderInner.InputBegan:Connect(function(Input)
             if Input.UserInputType == Enum.UserInputType.MouseButton1 and not Library:MouseIsOverOpenedFrame() then
+                if Slider.Gated and Library.KeyLocked then
+                    Library:Notify('🔒 Locked: enter key first', 2);
+                    return;
+                end;
                 local mPos = Mouse.X;
                 local gPos = Fill.Size.X.Offset;
                 local Diff = mPos - (Fill.AbsolutePosition.X + gPos);
@@ -2143,6 +2233,7 @@ do
         Groupbox:AddBlank(Info.BlankSize or 6);
         Groupbox:Resize();
 
+        Slider.Fill = Fill;
         Options[Idx] = Slider;
 
         return Slider;
@@ -2169,6 +2260,7 @@ do
             Value = Info.Multi and {};
             Multi = Info.Multi;
             Type = 'Dropdown';
+            Gated = Info.Gated;
             SpecialType = Info.SpecialType; -- can be either 'Player' or 'Team'
             Callback = Info.Callback or function(Value) end;
         };
@@ -2487,15 +2579,23 @@ do
         end;
 
         function Dropdown:OpenDropdown()
+            if Dropdown.Gated and Library.KeyLocked then
+                Library:Notify('🔒 Locked: enter key first', 2);
+                return;
+            end;
             ListOuter.Visible = true;
             Library.OpenedFrames[ListOuter] = true;
-            DropdownArrow.Rotation = 180;
+            Library:CreateTween(DropdownArrow, { Rotation = 180 });
+            -- ponytail: grow transition, clip-safe because ListOuter is a Frame
+            local Full = ListOuter.Size;
+            ListOuter.Size = UDim2.new(Full.X.Scale, Full.X.Offset, 0, 0);
+            Library:CreateTween(ListOuter, { Size = Full });
         end;
 
         function Dropdown:CloseDropdown()
-            ListOuter.Visible = false;
             Library.OpenedFrames[ListOuter] = nil;
-            DropdownArrow.Rotation = 0;
+            Library:CreateTween(DropdownArrow, { Rotation = 0 });
+            ListOuter.Visible = false;
         end;
 
         function Dropdown:OnChanged(Func)
@@ -2504,6 +2604,9 @@ do
         end;
 
         function Dropdown:SetValue(Val)
+            if Dropdown.Gated and Library.KeyLocked then
+                return;
+            end;
             if Dropdown.Multi then
                 local nTable = {};
 
@@ -2753,6 +2856,17 @@ do
         Parent = InnerFrame;
     });
 
+    -- ponytail: pfp chain custom asset -> player avatar -> text only
+    local WatermarkAvatar = Library:Create('ImageLabel', {
+        BackgroundTransparency = 1;
+        Position = UDim2.fromOffset(2, 2);
+        Size = UDim2.fromOffset(14, 14);
+        ZIndex = 204;
+        Visible = false;
+        Parent = InnerFrame;
+    });
+    Library.WatermarkAvatarImage = WatermarkAvatar;
+
     Library.Watermark = WatermarkOuter;
     Library.WatermarkText = WatermarkLabel;
     Library:MakeDraggable(Library.Watermark);
@@ -2839,6 +2953,44 @@ function Library:SetWatermark(Text)
     Library:SetWatermarkVisibility(true)
 
     Library.WatermarkText.Text = Text;
+    Library:RefreshWatermarkAvatar();
+end;
+
+function Library:SetWatermarkAvatar(AssetId)
+    Library.WatermarkAvatar = AssetId or '';
+    Library:RefreshWatermarkAvatar();
+end;
+
+function Library:RefreshWatermarkAvatar()
+    local Img = Library.WatermarkAvatarImage;
+    if not Img then return end;
+
+    local function Show(Image)
+        Img.Image = Image;
+        Img.Visible = true;
+        Library.WatermarkText.Position = UDim2.new(0, 20, 0, 0);
+        Library.WatermarkText.Size = UDim2.new(1, -22, 1, 0);
+    end;
+
+    local function Hide()
+        Img.Visible = false;
+        Library.WatermarkText.Position = UDim2.new(0, 5, 0, 0);
+        Library.WatermarkText.Size = UDim2.new(1, -4, 1, 0);
+    end;
+
+    if Library.WatermarkAvatar ~= '' then
+        return Show(Library.WatermarkAvatar);
+    end;
+
+    local Ok, Thumb = pcall(function()
+        return Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size60x60);
+    end);
+
+    if Ok and Thumb then
+        return Show(Thumb);
+    end;
+
+    Hide();
 end;
 
 function Library:Notify(Text, Time)
@@ -2944,8 +3096,10 @@ function Library:CreateWindow(...)
     end
 
     if type(Config.Title) ~= 'string' then Config.Title = 'No title' end
-    if type(Config.TabPadding) ~= 'number' then Config.TabPadding = 0 end
+    if type(Config.TabPadding) ~= 'number' then Config.TabPadding = 8 end
     if type(Config.MenuFadeTime) ~= 'number' then Config.MenuFadeTime = 0.2 end
+    if type(Config.AnimationEnabled) == 'boolean' then Library.AnimationEnabled = Config.AnimationEnabled end
+    if type(Config.AnimationDuration) == 'number' then Library.AnimationDuration = Config.AnimationDuration end
 
     if typeof(Config.Position) ~= 'UDim2' then Config.Position = UDim2.fromOffset(175, 50) end
     if typeof(Config.Size) ~= 'UDim2' then Config.Size = UDim2.fromOffset(550, 600) end
@@ -2971,6 +3125,31 @@ function Library:CreateWindow(...)
     });
 
     Library:MakeDraggable(Outer, 25);
+
+    -- ponytail: UIScale for open/close pop; outline sweep via UIStroke gradient
+    local WindowScale = Library:Create('UIScale', { Scale = 1, Parent = Outer });
+    local OutlineStroke = Library:Create('UIStroke', {
+        Color = Library.AccentColor;
+        Thickness = 1;
+        Parent = Inner;
+    });
+    local OutlineGradient = Library:Create('UIGradient', {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Library.AccentColor),
+            ColorSequenceKeypoint.new(0.5, Color3.new(1, 1, 1)),
+            ColorSequenceKeypoint.new(1, Library.AccentColor),
+        });
+        Parent = OutlineStroke;
+    });
+    if Library.OutlineGradient and Library.AnimationEnabled then
+        task.spawn(function()
+            while Outer.Parent do
+                OutlineGradient.Rotation = 0;
+                TweenService:Create(OutlineGradient, TweenInfo.new(2, Enum.EasingStyle.Linear), { Rotation = 360 }):Play();
+                task.wait(2);
+            end;
+        end);
+    end;
 
     local Inner = Library:Create('Frame', {
         BackgroundColor3 = Library.MainColor;
@@ -3101,9 +3280,10 @@ function Library:CreateWindow(...)
             BackgroundColor3 = 'MainColor';
         });
 
-        local TabFrame = Library:Create('Frame', {
+        local TabFrame = Library:Create('CanvasGroup', {
             Name = 'TabFrame',
             BackgroundTransparency = 1;
+            GroupTransparency = 0;
             Position = UDim2.new(0, 0, 0, 0);
             Size = UDim2.new(1, 0, 1, 0);
             Visible = false;
@@ -3165,14 +3345,19 @@ function Library:CreateWindow(...)
             end;
 
             Blocker.BackgroundTransparency = 0;
-            TabButton.BackgroundColor3 = Library.MainColor;
+            Library:CreateTween(TabButton, { BackgroundColor3 = Library.MainColor });
             Library.RegistryMap[TabButton].Properties.BackgroundColor3 = 'MainColor';
             TabFrame.Visible = true;
+            -- ponytail: slide + fade transition for tab content
+            TabFrame.Position = UDim2.new(0, 10, 0, 0);
+            TabFrame.GroupTransparency = 1;
+            Library:CreateTween(TabFrame, { Position = UDim2.new(0, 0, 0, 0) });
+            Library:CreateTween(TabFrame, { GroupTransparency = 0 });
         end;
 
         function Tab:HideTab()
             Blocker.BackgroundTransparency = 1;
-            TabButton.BackgroundColor3 = Library.BackgroundColor;
+            Library:CreateTween(TabButton, { BackgroundColor3 = Library.BackgroundColor });
             Library.RegistryMap[TabButton].Properties.BackgroundColor3 = 'BackgroundColor';
             TabFrame.Visible = false;
         end;
@@ -3520,6 +3705,13 @@ function Library:CreateWindow(...)
         if Toggled then
             -- A bit scuffed, but if we're going from not toggled -> toggled we want to show the frame immediately so that the fade is visible.
             Outer.Visible = true;
+            -- ponytail: 95% pop-in alongside fade
+            if Library.AnimationEnabled then
+                WindowScale.Scale = 0.95;
+                TweenService:Create(WindowScale, TweenInfo.new(FadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 1 }):Play();
+            else
+                WindowScale.Scale = 1;
+            end;
 
             task.spawn(function()
                 -- TODO: add cursor fade?
@@ -3591,11 +3783,20 @@ function Library:CreateWindow(...)
                     continue;
                 end;
 
-                TweenService:Create(Desc, TweenInfo.new(FadeTime, Enum.EasingStyle.Linear), { [Prop] = Toggled and Cache[Prop] or 1 }):Play();
+                -- ponytail: Quad Out fade, instant when animations off
+                if Library.AnimationEnabled then
+                    TweenService:Create(Desc, TweenInfo.new(FadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { [Prop] = Toggled and Cache[Prop] or 1 }):Play();
+                else
+                    Desc[Prop] = Toggled and Cache[Prop] or 1;
+                end;
             end;
         end;
 
         task.wait(FadeTime);
+
+        if not Toggled and Library.AnimationEnabled then
+            TweenService:Create(WindowScale, TweenInfo.new(FadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = 0.95 }):Play();
+        end;
 
         Outer.Visible = Toggled;
 
@@ -3615,6 +3816,27 @@ function Library:CreateWindow(...)
     if Config.AutoShow then task.spawn(Library.Toggle) end
 
     Window.Holder = Outer;
+
+    -- ponytail: unicode icons, not HTTP SVGs (TextLabels can't render those)
+    function Window:SetLogo(Text, Icon)
+        WindowLabel.Text = ((Icon and Icon .. ' ' or '') .. (Text or ''));
+    end;
+
+    function Window:AnimateLogo(Enabled, Icon, Text)
+        if Text or Icon then
+            Window:SetLogo(Text or Config.Title, Icon);
+        end;
+        if Window._LogoConn then Window._LogoConn:Disconnect() Window._LogoConn = nil end;
+        Library:RemoveFromRegistry(WindowLabel);
+        if Enabled then
+            Window._LogoConn = RenderStepped:Connect(function()
+                WindowLabel.TextColor3 = Library.CurrentRainbowColor;
+            end);
+        else
+            WindowLabel.TextColor3 = Library.FontColor;
+            Library:AddToRegistry(WindowLabel, { TextColor3 = 'FontColor' });
+        end;
+    end;
 
     return Window;
 end;
