@@ -2370,7 +2370,7 @@ do
         end;
 
         local function RecalculateListSize(YSize)
-            ListOuter.Size = UDim2.fromOffset(DropdownOuter.AbsoluteSize.X, YSize or (MAX_DROPDOWN_ITEMS * 20 + 2))
+            ListOuter.Size = UDim2.fromOffset(DropdownOuter.AbsoluteSize.X, YSize or (MAX_DROPDOWN_ITEMS * 20 + 22))
         end;
 
         RecalculateListPosition();
@@ -2393,11 +2393,34 @@ do
             BorderColor3 = 'OutlineColor';
         });
 
+        -- ponytail: always-on filter; Scrolling sits below it
+        local SearchBox = Library:Create('TextBox', {
+            BackgroundColor3 = Library.MainColor;
+            BorderColor3 = Library.OutlineColor;
+            Font = Library.Font;
+            PlaceholderText = 'Search...';
+            Text = '';
+            TextColor3 = Library.FontColor;
+            TextSize = 14;
+            TextXAlignment = Enum.TextXAlignment.Left;
+            ClearTextOnFocus = false;
+            Size = UDim2.new(1, 0, 0, 20);
+            ZIndex = 22;
+            Parent = ListInner;
+        });
+
+        Library:AddToRegistry(SearchBox, {
+            BackgroundColor3 = 'MainColor';
+            BorderColor3 = 'OutlineColor';
+            TextColor3 = 'FontColor';
+        });
+
         local Scrolling = Library:Create('ScrollingFrame', {
             BackgroundTransparency = 1;
             BorderSizePixel = 0;
             CanvasSize = UDim2.new(0, 0, 0, 0);
-            Size = UDim2.new(1, 0, 1, 0);
+            Position = UDim2.new(0, 0, 0, 20);
+            Size = UDim2.new(1, 0, 1, -20);
             ZIndex = 21;
             Parent = ListInner;
 
@@ -2455,6 +2478,8 @@ do
         function Dropdown:BuildDropdownList()
             local Values = Dropdown.Values;
             local Buttons = {};
+            -- ponytail: substring filter over the live search text
+            local Filter = SearchBox.Text:lower();
 
             for _, Element in next, Scrolling:GetChildren() do
                 if not Element:IsA('UIListLayout') then
@@ -2465,6 +2490,10 @@ do
             local Count = 0;
 
             for Idx, Value in next, Values do
+                if Filter ~= '' and not Value:lower():find(Filter, 1, true) then
+                    continue;
+                end;
+
                 local Table = {};
 
                 Count = Count + 1;
@@ -2566,9 +2595,13 @@ do
 
             Scrolling.CanvasSize = UDim2.fromOffset(0, (Count * 20) + 1);
 
-            local Y = math.clamp(Count * 20, 0, MAX_DROPDOWN_ITEMS * 20) + 1;
+            local Y = math.clamp(Count * 20, 0, MAX_DROPDOWN_ITEMS * 20) + 21;
             RecalculateListSize(Y);
         end;
+
+        SearchBox:GetPropertyChangedSignal('Text'):Connect(function()
+            Dropdown:BuildDropdownList();
+        end);
 
         function Dropdown:SetValues(NewValues)
             if NewValues then
@@ -2586,6 +2619,9 @@ do
             ListOuter.Visible = true;
             Library.OpenedFrames[ListOuter] = true;
             Library:CreateTween(DropdownArrow, { Rotation = 180 });
+            if SearchBox.Text ~= '' then
+                SearchBox.Text = '';
+            end;
             -- ponytail: grow transition, clip-safe because ListOuter is a Frame
             local Full = ListOuter.Size;
             ListOuter.Size = UDim2.new(Full.X.Scale, Full.X.Offset, 0, 0);
@@ -2993,7 +3029,7 @@ function Library:RefreshWatermarkAvatar()
     Hide();
 end;
 
-function Library:Notify(Text, Time)
+function Library:Notify(Text, Time, BarColor)
     local XSize, YSize = Library:GetTextBounds(Text, Library.Font, 14);
 
     YSize = YSize + 7
@@ -3071,6 +3107,12 @@ function Library:Notify(Text, Time)
         BackgroundColor3 = 'AccentColor';
     }, true);
 
+    -- ponytail: typed bars bypass the theme registry
+    if BarColor then
+        Library:RemoveFromRegistry(LeftColor);
+        LeftColor.BackgroundColor3 = BarColor;
+    end;
+
     pcall(NotifyOuter.TweenSize, NotifyOuter, UDim2.new(0, XSize + 8 + 4, 0, YSize), 'Out', 'Quad', 0.4, true);
 
     task.spawn(function()
@@ -3082,6 +3124,19 @@ function Library:Notify(Text, Time)
 
         NotifyOuter:Destroy();
     end);
+end;
+
+-- ponytail: typed notifies share the same slide, only the bar color differs
+function Library:NotifyInfo(Text, Time)
+    return Library:Notify(Text, Time, Color3.fromRGB(88, 101, 242));
+end;
+
+function Library:NotifySuccess(Text, Time)
+    return Library:Notify(Text, Time, Color3.fromRGB(80, 200, 120));
+end;
+
+function Library:NotifyError(Text, Time)
+    return Library:Notify(Text, Time, Library.RiskColor);
 end;
 
 function Library:CreateWindow(...)
@@ -3441,6 +3496,11 @@ function Library:CreateWindow(...)
             });
 
             function Groupbox:Resize()
+                if Groupbox.Collapsed then
+                    BoxOuter.Size = UDim2.new(1, 0, 0, 24);
+                    return;
+                end;
+
                 local Size = 0;
 
                 for _, Element in next, Groupbox.Container:GetChildren() do
@@ -3452,11 +3512,42 @@ function Library:CreateWindow(...)
                 BoxOuter.Size = UDim2.new(1, 0, 0, 20 + Size + 2 + 2);
             end;
 
+            -- ponytail: header click collapses to 24px; arrow prefix shows state
+            Groupbox.Name = Info.Name;
+            Groupbox.Collapsed = false;
+
+            local function RefreshCollapse()
+                GroupboxLabel.Text = (Groupbox.Collapsed and '▶ ' or '▼ ') .. Groupbox.Name;
+                Groupbox.Container.Visible = not Groupbox.Collapsed;
+                if Groupbox.Collapsed then
+                    BoxOuter.Size = UDim2.new(1, 0, 0, 24);
+                else
+                    Groupbox:Resize();
+                end;
+            end;
+
+            function Groupbox:SetCollapsed(Bool)
+                Groupbox.Collapsed = (not not Bool);
+                RefreshCollapse();
+            end;
+
+            local HeaderHit = Library:Create('TextButton', {
+                BackgroundTransparency = 1;
+                Text = '';
+                Size = UDim2.new(1, 0, 0, 20);
+                ZIndex = 6;
+                Parent = BoxInner;
+            });
+
+            HeaderHit.MouseButton1Click:Connect(function()
+                Groupbox:SetCollapsed(not Groupbox.Collapsed);
+            end);
+
             Groupbox.Container = Container;
             setmetatable(Groupbox, BaseGroupbox);
 
             Groupbox:AddBlank(3);
-            Groupbox:Resize();
+            RefreshCollapse();
 
             Tab.Groupboxes[Info.Name] = Groupbox;
 
